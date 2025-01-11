@@ -17,26 +17,34 @@ public class ProductController {
     @PostMapping
     public ResponseEntity<ProductDTO> createProduct(@RequestBody ProductDTO productDTO) {
 
-        ProductDTO createProduct = productService.createProduct(productDTO);
+        ProductDTO createdProductDTO = productService.createProduct(productDTO);
 
-        // ProductDTO createdProduct = productService.createProduct(productDTO);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(productDTO);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdProductDTO);
     }
 
     @PutMapping
-    public ResponseEntity<String> updateProduct(@RequestBody ProductDTO productDTO) {
+    public ResponseEntity<ProductDTO> updateProduct(@RequestBody ProductDTO productDTO) {
 
-        String updatedProduct = productService.updateProduct(productDTO);
+        ProductDTO updatedProductDTO = productService.updateProduct(productDTO);
 
-        return ResponseEntity.status(HttpStatus.OK).body(updatedProduct);
+        return ResponseEntity.status(HttpStatus.OK).body(updatedProductDTO);
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ProductDTO> getProduct(@PathVariable Long id) {
+
+        ProductDTO productDTO = productService.getProduct(id);
+
+        return ResponseEntity.status(HttpStatus.OK).body(productDTO);
+    }
+
+    /*
     @PutMapping("/{id}")
     public ResponseEntity<String> buyProduct(@PathVariable Long id) {
         String buyProduct = productService.buyProduct(id);
 
         return ResponseEntity.status(HttpStatus.OK).body(buyProduct);
     }
+     */
 
 }

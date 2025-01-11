@@ -4,6 +4,7 @@ import lokts.springboot.dto.ProductDTO;
 import lokts.springboot.entity.Product;
 import lokts.springboot.exception.ProductAlreadyExistsException;
 import lokts.springboot.exception.ProductNotExistsException;
+import lokts.springboot.mapper.ProductMapper;
 import lokts.springboot.repository.ProductRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
@@ -34,34 +35,42 @@ public class ProductService {
                 .price(productDTO.getPrice())
                 .stock(productDTO.getStock())
                 .build();
+
         product = productRepository.save(product);
 
-        productDTO.setId(product.getId());
+        ProductDTO updatedProductDTO = ProductMapper.INSTANCE.productToProductDTO(product);
 
-        return productDTO;
+        return updatedProductDTO;
     }
 
-    public String updateProduct(ProductDTO productDTO) {
-        Optional<Product> existingProductOpt = productRepository.findById(productDTO.getId());
+    public ProductDTO updateProduct(ProductDTO productDTO) {
+        Product existingProduct = productRepository.findById(productDTO.getId())
+                .orElseThrow(()-> new ProductNotExistsException("Product ID " + productDTO.getId() + " is not exist."));
 
-        if (existingProductOpt.isEmpty()) {
-            throw new ProductNotExistsException("Product " + productDTO.getName() + " is not exist.");
-        }
-
-        Product existingProduct = existingProductOpt.get();
-
-        if (!existingProduct.getName().equals(productDTO.getName())) {
-            productRepository.findByName(productDTO.getName())
-                    .orElseThrow(() -> new ProductAlreadyExistsException("Product with name " + productDTO.getName() + " already exists."));
+        if (!existingProduct.getName().equals(productDTO.getName()) &&
+        productRepository.findByName(productDTO.getName()).isPresent()) {
+            throw new ProductAlreadyExistsException("Product Name must be unique.");
         }
 
         existingProduct.setName(productDTO.getName());
         existingProduct.setPrice(productDTO.getPrice());
         existingProduct.setStock(productDTO.getStock());
-        productRepository.save(existingProduct);
+        Product updatedProduct = productRepository.save(existingProduct);
 
-        return new String( "Updated");
+        ProductDTO updatedProductDTO = ProductMapper.INSTANCE.productToProductDTO(updatedProduct);
+
+        return updatedProductDTO;
     }
+
+    public ProductDTO getProduct(Long id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(()-> new ProductNotExistsException("Product ID " + id + " is not exist."));
+
+        return ProductMapper.INSTANCE.productToProductDTO(product);
+
+    }
+
+    /*
     @Transactional
     public String buyProduct(Long id) {
         Optional<Product> existingProductOpt = productRepository.findByIdForUpdate(id);
@@ -76,4 +85,5 @@ public class ProductService {
 
         return new String( "Bought from Server " + environment.getProperty("local.server.port") + "! Only " + product.getStock() + " Stock Left!");
     }
+    */
 }
