@@ -1,6 +1,7 @@
 package lokts.springboot.controller;
 
 import lokts.springboot.dto.OrderDTO;
+import lokts.springboot.dto.OrderResponse;
 import lokts.springboot.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -19,9 +20,9 @@ public class OrderController {
 
 
     @PostMapping
-    public ResponseEntity<String> createOrder(@RequestBody OrderDTO orderDTO) {
+    public ResponseEntity<OrderResponse> createOrder(@RequestBody OrderDTO orderDTO) {
 
-        String order = orderService.createOrder(orderDTO);
+        OrderResponse order = orderService.createOrder(orderDTO);
 
         return ResponseEntity.status(HttpStatus.OK).body(order);
 

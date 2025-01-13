@@ -1,6 +1,7 @@
 package lokts.springboot.service;
 
 import lokts.springboot.dto.OrderDTO;
+import lokts.springboot.dto.OrderResponse;
 import lokts.springboot.entity.Order;
 import lokts.springboot.entity.OrderItem;
 import lokts.springboot.entity.Product;
@@ -14,7 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
@@ -29,28 +35,49 @@ public class OrderService {
     private Environment environment;
 
     @Transactional
-    public String createOrder(OrderDTO orderDTO) {
+    public OrderResponse createOrder(OrderDTO orderDTO) {
 
         AtomicReference<BigDecimal> totalAmount = new AtomicReference<>(BigDecimal.ZERO);
+        List<OrderResponse.OrderedItem> orderedItems = new ArrayList<>();
+
+        Map<Long, Integer> productQuantities = orderDTO.getOrderItems().stream().collect(Collectors.toMap(
+                OrderDTO.OrderItemDTO::getProductId,
+                OrderDTO.OrderItemDTO::getQuantity
+        ));
+
+        List<Long> orderItemsId = new ArrayList<>(productQuantities.keySet());
+
+        // Lock all required row, prevent asyn update by different order
+        List<Product> OrderedProducts = productRepository.findByProductIdsForUpdate(orderItemsId);
+
 
         Order order = new Order().builder()
                 .customerName(orderDTO.getCustomerName())
-                .orderItems(orderDTO.getOrderItems().stream().map(orderItemDTO ->{
-                    Product product = productRepository.findByIdForUpdate(orderItemDTO.getProductId())
-                            .orElseThrow(() -> new ProductNotExistsException("Product Id" + orderItemDTO.getProductId() + " is not exist."));
+                .orderItems(OrderedProducts.stream().map(product -> {
+
+                    Integer requiredQuantity = productQuantities.get(product.getId());
 
                     // Check stock availability
-                    if (product.getStock() < orderItemDTO.getQuantity()) {
-                        throw new ProductInsufficientStockException("You have request "+ orderItemDTO.getQuantity() + " for Product Id " + orderItemDTO.getProductId() + "! But there is only " + product.getStock() + " stocks left!");
+                    if (product.getStock() < requiredQuantity) {
+                        throw new ProductInsufficientStockException("You have request "+ requiredQuantity + " for Product Id " + product.getId() + "! But there is only " + product.getStock() + " stocks left!");
                     }
 
-                    product.setStock(product.getStock() - orderItemDTO.getQuantity());
-                    productRepository.save(product);
+                    product.setStock(product.getStock() - requiredQuantity);
+                    product = productRepository.save(product);
 
-                    OrderItem orderItem = new OrderItem().builder().product(product).quantity(orderItemDTO.getQuantity()).build();
+                    // Create orderItem
+                    OrderItem orderItem = new OrderItem().builder().product(product).quantity(requiredQuantity).build();
+
 
                     BigDecimal itemTotalAmount = product.getPrice().multiply(BigDecimal.valueOf(orderItem.getQuantity()));
                     totalAmount.set(totalAmount.get().add(itemTotalAmount));
+
+
+                    OrderResponse.OrderedItem orderedItem = new OrderResponse.OrderedItem();
+                    orderedItem.setStockLeft(product.getStock());
+                    orderedItem.setProductId(product.getId());
+
+                    orderedItems.add(orderedItem);
 
                     return orderItem;
                 }).toList())
@@ -59,7 +86,14 @@ public class OrderService {
 
         order = orderRepository.save(order);
 
-        return new String( "Order "+ order.getId() + " with total price = " + order.getTotalAmount() + " from Server " + environment.getProperty("local.server.port") + " !");
+        OrderResponse orderResponse = OrderResponse.builder()
+                .id(order.getId())
+                .orderedItems(orderedItems)
+                .totalAmount(order.getTotalAmount())
+                .port(environment.getProperty("local.server.port"))
+                .build();
+
+        return orderResponse;
 
     }
 }
