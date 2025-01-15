@@ -1,11 +1,11 @@
 package lokts.springboot.service;
 
+import jakarta.persistence.*;
 import lokts.springboot.dto.OrderDTO;
 import lokts.springboot.dto.OrderResponse;
 import lokts.springboot.entity.Order;
 import lokts.springboot.entity.OrderItem;
 import lokts.springboot.entity.Product;
-import lokts.springboot.exception.ProductNotExistsException;
 import lokts.springboot.exception.ProductInsufficientStockException;
 import lokts.springboot.repository.OrderRepository;
 import lokts.springboot.repository.ProductRepository;
@@ -15,11 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,58 +33,61 @@ public class OrderService {
     @Transactional
     public OrderResponse createOrder(OrderDTO orderDTO) {
 
-        AtomicReference<BigDecimal> totalAmount = new AtomicReference<>(BigDecimal.ZERO);
-        List<OrderResponse.OrderedItem> orderedItems = new ArrayList<>();
+        BigDecimal totalAmount = BigDecimal.ZERO;
 
+        List<OrderResponse.BoughtItems> boughtItems = new ArrayList<>();
+
+        // Use TreeMap to ensure the order of productId
         Map<Long, Integer> productQuantities = orderDTO.getOrderItems().stream().collect(Collectors.toMap(
                 OrderDTO.OrderItemDTO::getProductId,
-                OrderDTO.OrderItemDTO::getQuantity
+                OrderDTO.OrderItemDTO::getQuantity,
+                Integer::sum,
+                TreeMap::new
         ));
 
         List<Long> orderItemsId = new ArrayList<>(productQuantities.keySet());
+        List<Integer> orderItemsQuantity = new ArrayList<>(productQuantities.values());
 
-        // Lock all required row, prevent asyn update by different order
-        List<Product> OrderedProducts = productRepository.findByProductIdsForUpdate(orderItemsId);
+        // Lock all required row, prevent asyn update by other orders, keep itemId in ascending order
+        List<Product> products = productRepository.findByProductIdsForUpdate(orderItemsId);
 
+        for(Product product : products) {
+            if (product.getStock() < productQuantities.get(product.getId())) {
+                throw new ProductInsufficientStockException("You have request " + productQuantities.get(product.getId()) + " for Product Id " + product.getId() + "! But there is only " + product.getStock() + " stocks left!");
+            }
+        }
 
-        Order order = new Order().builder()
+        // Update Products Stock
+        List<Product> updatedProducts = updateProductStock(productQuantities);
+
+        List<OrderItem> orderItems = new ArrayList<>();
+        for(int i = 0; i < updatedProducts.size(); i++) {
+            orderItems.add(OrderItem
+                    .builder()
+                    .product(updatedProducts.get(i))
+                    .quantity(orderItemsQuantity.get(i))
+                    .build());
+
+            OrderResponse.BoughtItems boughtItem = new OrderResponse.BoughtItems();
+            boughtItem.setProductId(updatedProducts.get(i).getId());
+            boughtItem.setStockLeft(updatedProducts.get(i).getStock());
+            boughtItems.add(boughtItem);
+
+            totalAmount = totalAmount.add(updatedProducts.get(i).getPrice().multiply(new BigDecimal(orderItemsQuantity.get(i))));
+        }
+
+        Order order = Order.builder()
                 .customerName(orderDTO.getCustomerName())
-                .orderItems(OrderedProducts.stream().map(product -> {
-
-                    Integer requiredQuantity = productQuantities.get(product.getId());
-
-                    // Check stock availability
-                    if (product.getStock() < requiredQuantity) {
-                        throw new ProductInsufficientStockException("You have request "+ requiredQuantity + " for Product Id " + product.getId() + "! But there is only " + product.getStock() + " stocks left!");
-                    }
-
-                    product.setStock(product.getStock() - requiredQuantity);
-                    product = productRepository.save(product);
-
-                    // Create orderItem
-                    OrderItem orderItem = new OrderItem().builder().product(product).quantity(requiredQuantity).build();
-
-
-                    BigDecimal itemTotalAmount = product.getPrice().multiply(BigDecimal.valueOf(orderItem.getQuantity()));
-                    totalAmount.set(totalAmount.get().add(itemTotalAmount));
-
-
-                    OrderResponse.OrderedItem orderedItem = new OrderResponse.OrderedItem();
-                    orderedItem.setStockLeft(product.getStock());
-                    orderedItem.setProductId(product.getId());
-
-                    orderedItems.add(orderedItem);
-
-                    return orderItem;
-                }).toList())
-                .totalAmount(totalAmount.get())
+                .orderItems(orderItems)
+                .totalAmount(totalAmount)
                 .build();
 
+        // Create Order in Database
         order = orderRepository.save(order);
 
         OrderResponse orderResponse = OrderResponse.builder()
                 .id(order.getId())
-                .orderedItems(orderedItems)
+                .boughtItems(boughtItems)
                 .totalAmount(order.getTotalAmount())
                 .port(environment.getProperty("local.server.port"))
                 .build();
@@ -96,4 +95,33 @@ public class OrderService {
         return orderResponse;
 
     }
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Transactional
+    public List<Product> updateProductStock(Map<Long, Integer> productQuantities) {
+
+        for (Map.Entry<Long, Integer> entry : productQuantities.entrySet()) {
+            entityManager.createQuery("UPDATE Product p SET p.stock = p.stock - :quantity WHERE p.id = :productId")
+                    .setParameter("quantity", entry.getValue())
+                    .setParameter("productId", entry.getKey())
+                    .executeUpdate();
+        }
+
+        // Force Write Change to Database
+        entityManager.flush();
+        entityManager.clear();
+
+        String selectQuery = "SELECT p FROM Product p WHERE p.id IN :productIds";
+
+        TypedQuery<Product> query = entityManager.createQuery(selectQuery,Product.class);
+        query.setParameter("productIds", productQuantities.keySet());
+
+        List<Product> updatedProducts = query.getResultList();
+
+        return updatedProducts;
+    }
+
+
 }

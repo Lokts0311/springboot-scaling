@@ -20,6 +20,6 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ProductInsufficientStockException.class)
     public ResponseEntity<String> handleProductInsufficientStockException(ProductInsufficientStockException e) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        return ResponseEntity.status(HttpStatus.OK).body(e.getMessage());
     }
 }

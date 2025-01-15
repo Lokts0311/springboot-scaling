@@ -15,10 +15,15 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 50
+        averageUtilization: 70
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 50
+        averageUtilization: 70
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 300 # Wait 5 mins before sacling up
+    scaleDown:
+      stabilizationWindowSeconds: 300 # Wait 5 mins before sacling down

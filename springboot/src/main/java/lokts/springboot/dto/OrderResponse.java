@@ -14,34 +14,14 @@ public class OrderResponse {
 
     private Long id;
 
-    private BigDecimal totalAmount;
-
-    private List<OrderedItem> orderedItems;
+    private List<BoughtItems> boughtItems;
 
     @Setter
     @Getter
-    public static class OrderedItem {
-        public Long getProductId() {
-            return productId;
-        }
-
-        public void setProductId(Long productId) {
-            this.productId = productId;
-        }
-
-        public Integer getStockLeft() {
-            return stockLeft;
-        }
-
-        public void setStockLeft(Integer stockLeft) {
-            this.stockLeft = stockLeft;
-        }
-
+    public static class BoughtItems {
         private Long productId;
         private Integer stockLeft;
-
-
     }
-
+    private BigDecimal totalAmount;
     private String port;
 }

@@ -19,4 +19,5 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     @Query(value = "select * from products p where p.id IN :productIds for update", nativeQuery = true)
     List<Product> findByProductIdsForUpdate(@Param("productIds") List<Long> orderItemsId);
+
 }

@@ -38,13 +38,4 @@ public class ProductController {
         return ResponseEntity.status(HttpStatus.OK).body(productDTO);
     }
 
-    /*
-    @PutMapping("/{id}")
-    public ResponseEntity<String> buyProduct(@PathVariable Long id) {
-        String buyProduct = productService.buyProduct(id);
-
-        return ResponseEntity.status(HttpStatus.OK).body(buyProduct);
-    }
-     */
-
 }

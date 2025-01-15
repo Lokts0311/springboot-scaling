@@ -13,10 +13,17 @@ spec:
     spec:
       containers:
       - name: myapp
-        image: my-app:latest
+        image: myapp:latest
         imagePullPolicy: Never # Never when using local image
         ports:
         - containerPort: 8080
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "256m"
+          limits:
+            memory: "512Mi"
+            cpu: "256m"
         env:
         - name: SPRING_DATASOURCE_URL
           value: jdbc:mysql://mysql:3306/mydb
