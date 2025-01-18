@@ -1,7 +1,10 @@
+C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\configuration\RedisConfig.java
+C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\configuration\RedissonConfig.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\configuration\WebConfig.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\controller\OrderController.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\controller\ProductController.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\dto\OrderDTO.java
+C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\dto\OrderResponse.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\dto\ProductDTO.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\entity\Order.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\entity\OrderItem.java
@@ -16,4 +19,5 @@ C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springb
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\repository\ProductRepository.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\service\OrderService.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\service\ProductService.java
+C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\service\RedisService.java
 C:\Users\Jason\Desktop\springboot-scaling\springboot\src\main\java\lokts\springboot\SpringbootApplication.java

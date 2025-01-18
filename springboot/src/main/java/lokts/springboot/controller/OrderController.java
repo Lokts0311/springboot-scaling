@@ -22,6 +22,8 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@RequestBody OrderDTO orderDTO) {
 
+        System.out.println("GET A CREATE ORDER");
+
         OrderResponse order = orderService.createOrder(orderDTO);
 
         return ResponseEntity.status(HttpStatus.OK).body(order);

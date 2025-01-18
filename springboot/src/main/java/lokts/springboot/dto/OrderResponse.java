@@ -22,6 +22,5 @@ public class OrderResponse {
         private Long productId;
         private Integer stockLeft;
     }
-    private BigDecimal totalAmount;
-    private String port;
+
 }

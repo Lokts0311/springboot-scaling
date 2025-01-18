@@ -3,24 +3,28 @@ package lokts.springboot.service;
 import lokts.springboot.dto.ProductDTO;
 import lokts.springboot.entity.Product;
 import lokts.springboot.exception.ProductAlreadyExistsException;
+import lokts.springboot.exception.ProductInsufficientStockException;
 import lokts.springboot.exception.ProductNotExistsException;
 import lokts.springboot.mapper.ProductMapper;
 import lokts.springboot.repository.ProductRepository;
+import org.antlr.v4.runtime.misc.IntegerStack;
+import org.redisson.RedissonMultiLock;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.concurrent.*;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProductService {
 
     @Autowired
     private ProductRepository productRepository;
-
-    @Autowired
-    private Environment environment;
 
     public ProductDTO createProduct(ProductDTO productDTO) {
 
@@ -30,7 +34,7 @@ public class ProductService {
             throw new ProductAlreadyExistsException("Product " + productDTO.getName() + " already exists.");
         }
 
-        Product product = new Product().builder()
+        Product product = Product.builder()
                 .name(productDTO.getName())
                 .price(productDTO.getPrice())
                 .stock(productDTO.getStock())
@@ -38,9 +42,7 @@ public class ProductService {
 
         product = productRepository.save(product);
 
-        ProductDTO updatedProductDTO = ProductMapper.INSTANCE.productToProductDTO(product);
-
-        return updatedProductDTO;
+        return ProductMapper.INSTANCE.productToProductDTO(product);
     }
 
     public ProductDTO updateProduct(ProductDTO productDTO) {
@@ -57,9 +59,7 @@ public class ProductService {
         existingProduct.setStock(productDTO.getStock());
         Product updatedProduct = productRepository.save(existingProduct);
 
-        ProductDTO updatedProductDTO = ProductMapper.INSTANCE.productToProductDTO(updatedProduct);
-
-        return updatedProductDTO;
+        return ProductMapper.INSTANCE.productToProductDTO(updatedProduct);
     }
 
     public ProductDTO getProduct(Long id) {
@@ -70,20 +70,108 @@ public class ProductService {
 
     }
 
-    /*
-    @Transactional
-    public String buyProduct(Long id) {
-        Optional<Product> existingProductOpt = productRepository.findByIdForUpdate(id);
+    @Autowired
+    private RedisService redisService;
 
-        Product product = productRepository.findById(id)
-                .orElseThrow(() -> new ProductNotExistsException("Product Id" + id + " is not exist."));
+    @Autowired
+    private RedissonClient redissonClient;
 
-        if(product.getStock() > 0) {
-            product.setStock(product.getStock()-1);
+    private static final String LOCK_KEY_PREFIX = "lock:product:";
+
+    public Map<Long, Integer> decrementStock(Map<Long, Integer> productQuantities) {
+
+        List<Long> productIds = new ArrayList<>(productQuantities.keySet());
+        Collections.sort(productIds);
+        List<RLock> locks = new ArrayList<>();
+
+        Map<Long, Integer> updatedMap = new HashMap<>();
+
+        for (Long productId : productIds) {
+            locks.add(redissonClient.getLock(LOCK_KEY_PREFIX + productId));
         }
-        product = productRepository.save(product);
 
-        return new String( "Bought from Server " + environment.getProperty("local.server.port") + "! Only " + product.getStock() + " Stock Left!");
+        RedissonMultiLock multiLock = new RedissonMultiLock(locks.toArray(locks.toArray(new RLock[0])));
+        try {
+            if (multiLock.tryLock(5, 10, TimeUnit.SECONDS)) {
+
+                for (Long productId : productIds) {
+                    int quantity = productQuantities.get(productId);
+
+                    Product product;
+
+                    if (!redisService.isProductInCache(productId)) {
+                        product = productRepository.findById(productId)
+                                .orElseThrow(() -> new ProductNotExistsException("Product Id " + productId + "not exist"));
+
+                        redisService.saveProductToCache(productId, product.getStock());
+                    }
+
+                    Integer currentStock = redisService.getStock(productId);
+
+                    if (currentStock < quantity) {
+                        throw new ProductInsufficientStockException("Not enough stock!");
+                    }
+                    Long updatedStock = redisService.decrementStock(productId, quantity);
+
+                    updatedMap.put(productId, updatedStock.intValue());
+                }
+            } else {
+                throw new RuntimeException("Unable to acquire multi-lock for products!");
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Failed to update stocks: " + e.getMessage() ,e);
+        } finally {
+            if (multiLock.isHeldByCurrentThread()) {
+                multiLock.unlock();
+            }
+        }
+        return updatedMap;
     }
-    */
+
+
+    public void updateProductStock(Long productId, Integer stock) {
+
+        Product product = productRepository.findByIdForUpdate(productId)
+                .orElseThrow(() -> new ProductNotExistsException("Product Id " + productId + "not exist"));
+
+        RLock lock = redissonClient.getLock(LOCK_KEY_PREFIX + productId);
+
+        try {
+            if (lock.tryLock(5, 10, TimeUnit.SECONDS)) {
+                // Update stock of product in Redis first
+                redisService.saveProductToCache(productId, stock);
+
+                // For High Consistency, Write-Through approach, Update Redis then Database
+                // For Eventually Consistency, Write-Behind approach, Update Redis then wait for sync
+                product.setStock(stock);
+                productRepository.save(product);
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+
+    @Scheduled(fixedRate = 60000)
+    public void syncStockToDatabase() {
+
+        System.out.println("Start Sync Redis Data to Database");
+        Set<String> keys = redisService.getAllkeys("product:*");
+
+        for (String key : keys) {
+            Long productId = Long.valueOf(key.split(":")[1]);
+            Integer stock = redisService.getStock(productId);
+
+            if (stock != null) {
+                Product product = productRepository.findById(productId)
+                        .orElseThrow(() -> new RuntimeException("Product not found!"));
+
+                product.setStock(stock);
+                productRepository.save(product);
+            }
+        }
+    }
 }

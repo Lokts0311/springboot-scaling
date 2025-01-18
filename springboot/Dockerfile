@@ -2,7 +2,7 @@ FROM amazoncorretto:21-alpine-full as build
 
 WORKDIR /app
 
-COPY out/artifacts/springboot_jar/springboot.jar /app/my-app.jar
+COPY target/springboot-0.0.1-SNAPSHOT.jar /app/my-app.jar
 
 EXPOSE 8080
 

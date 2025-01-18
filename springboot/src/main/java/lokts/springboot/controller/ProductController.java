@@ -38,4 +38,12 @@ public class ProductController {
         return ResponseEntity.status(HttpStatus.OK).body(productDTO);
     }
 
+    @PutMapping("/{id}/stock/{stock}")
+    public ResponseEntity<String> updateProduct(@PathVariable Long id,@PathVariable Integer stock) {
+
+        productService.updateProductStock(id, stock);
+
+        return ResponseEntity.status(HttpStatus.OK).body("Successfully updated stock");
+    }
+
 }
